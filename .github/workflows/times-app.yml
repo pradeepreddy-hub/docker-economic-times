@@ -63,11 +63,11 @@ jobs:
         
     - name: Status check
       run: |
-        curl -I http://localhost:8080/economic-times-app/ || true
+        curl -I http://3.110.190.200:8080/economic-times-app/ || true
         
     - name: Verify app content
       run: |
-        RESPONSE=$(curl -s http://localhost:8080/economic-times-app/)
+        RESPONSE=$(curl -s http://3.110.190.200:8080/economic-times-app/)
         echo "$RESPONSE" | grep "Welcome to Economic Times App" || true
         echo "$RESPONSE" | grep "Live News Categories" || true
         echo "$RESPONSE" | grep "Top Headlines" || true
