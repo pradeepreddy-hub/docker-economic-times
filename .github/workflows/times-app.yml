@@ -6,7 +6,7 @@ on:
 
 jobs:
   prerequisites:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
     - name: Checkout code
@@ -19,7 +19,7 @@ jobs:
         cache: 'maven'
   
   build:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: prerequisites
     steps:
     - name: Checkout code
@@ -39,7 +39,7 @@ jobs:
         path: target/*.war
   
   run:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: build
     steps:
     - name: Download war artifact
