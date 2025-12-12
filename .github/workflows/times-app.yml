@@ -37,10 +37,70 @@ jobs:
       with:
         name: economic-times-app
         path: target/*.war
-  
-  run:
+
+  publish-to-jfrog:
+    name: Publish WAR to JFrog Artifactory
     runs-on: self-hosted
     needs: build
+    steps:
+      - name: Download war artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: economic-times-app
+          path: ./war
+
+      - name: Show downloaded files
+        run: ls -l ./war || true
+
+      - name: Install JFrog CLI
+        run: |
+          curl -fL https://getcli.jfrog.io | sh
+          chmod +x jfrog
+          sudo mv jfrog /usr/local/bin/ || mv jfrog $HOME/bin/ || true
+          jfrog -v
+
+      - name: Configure JFrog CLI (non-interactive)
+        env:
+          JFROG_URL: ${{ secrets.JFROG_URL }}
+          JFROG_USERNAME: ${{ secrets.JFROG_USERNAME }}
+          JFROG_PASSWORD: ${{ secrets.JFROG_PASSWORD }}
+        run: |
+          # Add a config named "artifactory" (non-interactive)
+          jfrog config add artifactory \
+            --url="${JFROG_URL}" \
+            --user="${JFROG_USERNAME}" \
+            --password="${JFROG_PASSWORD}" \
+            --interactive=false
+          # Show configs (sanitized output)
+          jfrog config show artifactory || true
+
+      - name: Upload WAR to Artifactory
+        env:
+          JFROG_REPO: ${{ secrets.JFROG_REPO }}
+        run: |
+          WAR_FILE=$(ls ./war/*.war | head -n1)
+          echo "Uploading: $WAR_FILE to ${JFROG_REPO}/"
+          # Upload to the repository root (you can change path to include groupId/artifactId/version)
+          jfrog rt u "$WAR_FILE" "${JFROG_REPO}/" --flat=true
+          echo "List uploaded files (repo root):"
+          jfrog rt s "${JFROG_REPO}/*$(basename "$WAR_FILE")" || true
+
+      - name: (Optional) Fallback: curl upload (if JFrog CLI fails)
+        if: failure()
+        env:
+          JFROG_URL: ${{ secrets.JFROG_URL }}
+          JFROG_USERNAME: ${{ secrets.JFROG_USERNAME }}
+          JFROG_PASSWORD: ${{ secrets.JFROG_PASSWORD }}
+          JFROG_REPO: ${{ secrets.JFROG_REPO }}
+        run: |
+          WAR_FILE=$(ls ./war/*.war | head -n1)
+          echo "Attempting curl fallback upload of $WAR_FILE"
+          curl -u "${JFROG_USERNAME}:${JFROG_PASSWORD}" -T "$WAR_FILE" \
+            "${JFROG_URL}/${JFROG_REPO}/$(basename $WAR_FILE)" || true
+
+  run:
+    runs-on: self-hosted
+    needs: publish-to-jfrog
     steps:
     - name: Download war artifact
       uses: actions/download-artifact@v4
@@ -59,15 +119,15 @@ jobs:
       run: |
         cp ./war/*.war tomcat10/webapps/
         nohup tomcat10/bin/startup.sh &
-        sleep 10
-        
+        sleep 10    
+
     - name: Status check
       run: |
-        curl -I http://65.0.170.244:8080/economic-times-app/ || true
+        curl -I http://13.233.193.196:8080/economic-times-app/ || true
         
     - name: Verify app content
       run: |
-        RESPONSE=$(curl -s http://65.0.170.244:8080/economic-times-app/)
+        RESPONSE=$(curl -s http://13.233.193.196:8080/economic-times-app/)
         echo "$RESPONSE" | grep "Welcome to Economic Times App" || true
         echo "$RESPONSE" | grep "Live News Categories" || true
         echo "$RESPONSE" | grep "Top Headlines" || true
