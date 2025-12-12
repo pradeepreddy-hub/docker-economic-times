@@ -24,30 +24,25 @@ jobs:
       - name: Install JFrog CLI
         uses: jfrog/setup-jfrog-cli@v2
 
-      - name: Configure JFrog CLI (non-interactive)
-        if: ${{ secrets.JFROG_URL != '' && secrets.JFROG_USERNAME != '' && secrets.JFROG_PASSWORD != '' }}
+      - name: Configure & Upload to Artifactory
+        # pass secrets into the shell environment (they will be masked in logs)
         env:
           JFROG_URL: ${{ secrets.JFROG_URL }}
           JFROG_USERNAME: ${{ secrets.JFROG_USERNAME }}
           JFROG_PASSWORD: ${{ secrets.JFROG_PASSWORD }}
+          JFROG_REPO: ${{ secrets.JFROG_REPO }}
         run: |
+          # fail fast with a human-friendly message if any required secret is missing
+          if [ -z "$JFROG_URL" ] || [ -z "$JFROG_USERNAME" ] || [ -z "$JFROG_PASSWORD" ] || [ -z "$JFROG_REPO" ]; then
+            echo "ERROR: Missing one or more Artifactory secrets. Please set JFROG_URL, JFROG_USERNAME, JFROG_PASSWORD, JFROG_REPO in repository secrets."
+            exit 1
+          fi
+
+          # configure jfrog cli (non-interactive)
           jfrog config add artifactory --interactive=false \
             --url="$JFROG_URL" \
             --user="$JFROG_USERNAME" \
             --password="$JFROG_PASSWORD"
 
-      - name: Upload WAR to Artifactory
-        if: ${{ secrets.JFROG_URL != '' && secrets.JFROG_USERNAME != '' && secrets.JFROG_PASSWORD != '' && secrets.JFROG_REPO != '' }}
-        env:
-          ARTIFACT_PATH: target/*.war
-          DEST_REPO: ${{ secrets.JFROG_REPO }}
-        run: |
-          echo "Uploading ${ARTIFACT_PATH} → ${DEST_REPO}/"
-          jfrog rt u "${ARTIFACT_PATH}" "${DEST_REPO}/" --flat=true
-
-      - name: Fail early if Artifactory not configured
-        if: ${{ secrets.JFROG_URL == '' || secrets.JFROG_USERNAME == '' || secrets.JFROG_PASSWORD == '' || secrets.JFROG_REPO == '' }}
-        run: |
-          echo "One or more Artifactory secrets are missing. Skipping upload."
-          echo "Required secrets: JFROG_URL, JFROG_USERNAME, JFROG_PASSWORD, JFROG_REPO"
-          exit 1
+          # upload the built WAR
+          jfrog rt u "target/*.war" "${JFROG_REPO}/" --flat=true
