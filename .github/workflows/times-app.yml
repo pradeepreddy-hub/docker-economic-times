@@ -24,25 +24,42 @@ jobs:
       - name: Install JFrog CLI
         uses: jfrog/setup-jfrog-cli@v2
 
-      - name: Configure & Upload to Artifactory
-        # pass secrets into the shell environment (they will be masked in logs)
+      - name: Configure and upload to Artifactory (safe)
         env:
           JFROG_URL: ${{ secrets.JFROG_URL }}
           JFROG_USERNAME: ${{ secrets.JFROG_USERNAME }}
           JFROG_PASSWORD: ${{ secrets.JFROG_PASSWORD }}
+          JFROG_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
           JFROG_REPO: ${{ secrets.JFROG_REPO }}
         run: |
-          # fail fast with a human-friendly message if any required secret is missing
-          if [ -z "$JFROG_URL" ] || [ -z "$JFROG_USERNAME" ] || [ -z "$JFROG_PASSWORD" ] || [ -z "$JFROG_REPO" ]; then
-            echo "ERROR: Missing one or more Artifactory secrets. Please set JFROG_URL, JFROG_USERNAME, JFROG_PASSWORD, JFROG_REPO in repository secrets."
+          set -euo pipefail
+
+          # Basic validation of required values
+          if [ -z "${JFROG_URL:-}" ] || [ -z "${JFROG_REPO:-}" ]; then
+            echo "ERROR: JFROG_URL and JFROG_REPO must be set as repository secrets."
             exit 1
           fi
 
-          # configure jfrog cli (non-interactive)
-          jfrog config add artifactory --interactive=false \
-            --url="$JFROG_URL" \
-            --user="$JFROG_USERNAME" \
-            --password="$JFROG_PASSWORD"
+          echo "Pinging Artifactory at $JFROG_URL ..."
+          if ! curl -sSf --connect-timeout 10 "$JFROG_URL/api/system/ping" >/dev/null; then
+            echo "ERROR: Unable to reach $JFROG_URL (ping failed). Check JFROG_URL format (include or omit '/artifactory' as required)."
+            exit 1
+          fi
 
-          # upload the built WAR
+          # Prefer access token (avoids server encryption endpoint)
+          if [ -n "${JFROG_ACCESS_TOKEN:-}" ]; then
+            echo "Using JFROG_ACCESS_TOKEN for authentication (recommended)."
+            jfrog config add artifactory --interactive=false --url="$JFROG_URL" --access-token="$JFROG_ACCESS_TOKEN"
+          else
+            # Fallback to username/password
+            if [ -z "${JFROG_USERNAME:-}" ] || [ -z "${JFROG_PASSWORD:-}" ]; then
+              echo "ERROR: No access token and username/password not fully provided. Provide JFROG_ACCESS_TOKEN or set JFROG_USERNAME and JFROG_PASSWORD."
+              exit 1
+            fi
+            echo "Using JFROG_USERNAME/JFROG_PASSWORD for authentication (will attempt server-side handling)."
+            jfrog config add artifactory --interactive=false --url="$JFROG_URL" --user="$JFROG_USERNAME" --password="$JFROG_PASSWORD"
+          fi
+
+          echo "Uploading target/*.war -> ${JFROG_REPO}/"
           jfrog rt u "target/*.war" "${JFROG_REPO}/" --flat=true
+
