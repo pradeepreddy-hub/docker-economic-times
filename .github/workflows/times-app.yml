@@ -6,7 +6,7 @@ on:
 
 jobs:
   prerequisites:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
     - name: Checkout code
@@ -19,7 +19,7 @@ jobs:
         cache: 'maven'
   
   build:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: prerequisites
     steps:
     - name: Checkout code
@@ -37,9 +37,45 @@ jobs:
       with:
         name: economic-times-app
         path: target/*.war
-  
+
+publish-to-artifactory:
+  # needs: build    # <- uncomment if you have a separate build job named "build"
+  runs-on: ubuntu-latest
+  steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Set up JDK (if you need to build here)
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+
+    - name: Build (optional) - Maven example
+      # Remove or replace this step if your workflow already builds the artifact
+      run: mvn -B package -DskipTests
+
+    - name: Install JFrog CLI
+      uses: jfrog/setup-jfrog-cli@v2
+
+    - name: Configure JFrog CLI (non-interactive)
+      run: |
+        jfrog config add artifactory --interactive=false \
+          --url="${{ secrets.JFROG_URL }}" \
+          --user="${{ secrets.JFROG_USERNAME }}" \
+          --password="${{ secrets.JFROG_PASSWORD }}"
+
+    - name: Upload WAR/JAR to Artifactory (JFrog CLI)
+      env:
+        ARTIFACT_PATH: target/*.war    # change to target/*.jar or build/libs/*.jar as needed
+        DEST_REPO: ${{ secrets.JFROG_REPO }}
+      run: |
+        echo "Uploading artifacts matching: $ARTIFACT_PATH to $DEST_REPO"
+        # The "artifactory" config added above will be used by the CLI
+        jfrog rt u "$ARTIFACT_PATH" "${DEST_REPO}/" --flat=true
+
   run:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: build
     steps:
     - name: Download war artifact
