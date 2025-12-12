@@ -15,11 +15,11 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
+          distribution: temurin
           java-version: '17'
-          distribution: 'temurin'
 
       - name: Build WAR
-        run: mvn -B clean package
+        run: mvn -B clean package -DskipTests
 
       - name: Install JFrog CLI
         uses: jfrog/setup-jfrog-cli@v2
@@ -34,7 +34,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Basic validation of required values
+          # Basic validation
           if [ -z "${JFROG_URL:-}" ] || [ -z "${JFROG_REPO:-}" ]; then
             echo "ERROR: JFROG_URL and JFROG_REPO must be set as repository secrets."
             exit 1
@@ -42,24 +42,32 @@ jobs:
 
           echo "Pinging Artifactory at $JFROG_URL ..."
           if ! curl -sSf --connect-timeout 10 "$JFROG_URL/api/system/ping" >/dev/null; then
-            echo "ERROR: Unable to reach $JFROG_URL (ping failed). Check JFROG_URL format (include or omit '/artifactory' as required)."
+            echo "ERROR: Unable to reach $JFROG_URL (ping failed). Check JFROG_URL format."
             exit 1
           fi
 
-          # Prefer access token (avoids server encryption endpoint)
+          # Configure JFrog CLI: prefer access token
           if [ -n "${JFROG_ACCESS_TOKEN:-}" ]; then
-            echo "Using JFROG_ACCESS_TOKEN for authentication (recommended)."
+            echo "Using JFROG_ACCESS_TOKEN for authentication."
             jfrog config add artifactory --interactive=false --url="$JFROG_URL" --access-token="$JFROG_ACCESS_TOKEN"
           else
-            # Fallback to username/password
             if [ -z "${JFROG_USERNAME:-}" ] || [ -z "${JFROG_PASSWORD:-}" ]; then
-              echo "ERROR: No access token and username/password not fully provided. Provide JFROG_ACCESS_TOKEN or set JFROG_USERNAME and JFROG_PASSWORD."
+              echo "ERROR: No access token and username/password not fully provided."
+              echo "Set JFROG_ACCESS_TOKEN or both JFROG_USERNAME and JFROG_PASSWORD in repo secrets."
               exit 1
             fi
-            echo "Using JFROG_USERNAME/JFROG_PASSWORD for authentication (will attempt server-side handling)."
+            echo "Using JFROG_USERNAME/JFROG_PASSWORD for authentication."
             jfrog config add artifactory --interactive=false --url="$JFROG_URL" --user="$JFROG_USERNAME" --password="$JFROG_PASSWORD"
           fi
 
-          echo "Uploading target/*.war -> ${JFROG_REPO}/"
-          jfrog rt u "target/*.war" "${JFROG_REPO}/" --flat=true
+          # Verify artifact exists
+          ARTIFACT_GLOB="target/*.war"
+          if ! ls $ARTIFACT_GLOB >/dev/null 2>&1; then
+            echo "ERROR: No WAR found at $ARTIFACT_GLOB. Check your build output."
+            exit 1
+          fi
 
+          echo "Uploading $ARTIFACT_GLOB -> ${JFROG_REPO}/"
+          jfrog rt u "$ARTIFACT_GLOB" "${JFROG_REPO}/" --flat=true
+
+          echo "Upload finished."
