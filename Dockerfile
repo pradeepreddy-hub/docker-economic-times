@@ -1,4 +1,4 @@
-FROM maven:3.8.2-openjdk-8 AS mavenbuilder
+FROM maven:3.9.6-eclipse-temurin-17 AS mavenbuilder
 ARG TEST=/var/lib/
 WORKDIR ${TEST}
 COPY . .
