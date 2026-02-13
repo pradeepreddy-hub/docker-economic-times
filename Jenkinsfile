@@ -12,7 +12,7 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 git branch: 'main',
-                    url: 'https://github.com/pradeepreddy-hub/Jenkins_docker_hello-world-war.git'
+                    url: 'https://github.com/pradeepreddy-hub/docker-economic-times.git'
             }
         }
 
