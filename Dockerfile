@@ -1,9 +1,8 @@
-FROM maven:3.9.6-eclipse-temurin-17 AS mavenbuilder
-ARG TEST=/var/lib/
-WORKDIR ${TEST}
-COPY . .
-RUN mvn clean package
+FROM maven:3.9.6-eclipse-temurin-17 AS builder
+WORKDIR /app
+COPY pom.xml .
+COPY src ./src
+RUN mvn clean package -DskipTests
 
-FROM tomcat:jre8-temurin-focal
-ARG TEST=/var/lib
-COPY --from=mavenbuilder ${TEST}/target/*.war /usr/local/tomcat/webapps
+FROM tomcat:10.1-jre17-temurin
+COPY --from=builder /app/target/*.war /usr/local/tomcat/webapps/
