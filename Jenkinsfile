@@ -1,9 +1,14 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'docker:latest'
+            args '-v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker'
+        }
+    }
 
     environment {
         IMAGE_NAME     = "pradeepreddyhub/economic-times-app"
-        IMAGE_TAG      = "latest"
+        IMAGE_TAG      = "${BUILD_NUMBER}"
         DOCKER_CREDS   = "dockerhub-creds"
         CONTAINER_NAME = "economic-times-container"
     }
