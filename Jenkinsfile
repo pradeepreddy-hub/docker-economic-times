@@ -11,6 +11,7 @@ pipeline {
         IMAGE_TAG      = "${BUILD_NUMBER}"
         DOCKER_CREDS   = "dockerhub-creds"
         CONTAINER_NAME = "economic-times-container"
+        HOME = "${WORKSPACE}"
     }
 
     stages {
